@@ -99,17 +99,4 @@ sse_sessions = {
 }
 
 
-What Changed:
-━━━━━━━━━━━━━
-BEFORE: Custom events (connected, tools, ping) ❌
-AFTER:  JSON-RPC 2.0 protocol messages ✅
-
-BEFORE: No session management ❌
-AFTER:  UUID-based sessions ✅
-
-BEFORE: GET /messages (wrong!) ❌
-AFTER:  POST /messages (correct!) ✅
-
-BEFORE: No CORS ❌
-AFTER:  Full CORS support ✅
 
