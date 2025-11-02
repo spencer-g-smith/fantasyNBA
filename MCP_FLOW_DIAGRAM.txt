@@ -1,0 +1,115 @@
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                       MCP Protocol Flow (CORRECT)                           │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────┐                                    ┌──────────────────┐
+│                  │                                    │                  │
+│   MCP Client     │                                    │   FastAPI Server │
+│  (Claude, etc)   │                                    │    (main.py)     │
+│                  │                                    │                  │
+└────────┬─────────┘                                    └────────┬─────────┘
+         │                                                       │
+         │  1. GET /sse                                         │
+         ├──────────────────────────────────────────────────────>│
+         │     (Establish SSE connection)                       │
+         │                                                       │
+         │                                     Creates session:  │
+         │                                     - UUID: abc-123   │
+         │                                     - SseServerTransport
+         │                                     - mcp_server.run()│
+         │                                                       │
+         │  2. SSE Stream Opens                                 │
+         │<──────────────────────────────────────────────────────┤
+         │     Content-Type: text/event-stream                  │
+         │                                                       │
+         │  3. Server sends MCP init (JSON-RPC 2.0)            │
+         │<══════════════════════════════════════════════════════┤
+         │     data: {"jsonrpc": "2.0", ...}                    │
+         │                                                       │
+         │  4. POST /messages                                   │
+         │     {"jsonrpc": "2.0",                               │
+         │      "method": "initialize",                         │
+         ├──────────────────────────────────────────────────────>│
+         │      "params": {...}}                                │
+         │                                     Routes to session │
+         │                                     abc-123           │
+         │                                                       │
+         │  5. Response via SSE (JSON-RPC 2.0)                 │
+         │<══════════════════════════════════════════════════════┤
+         │     data: {"jsonrpc": "2.0", "result": {...}}       │
+         │                                                       │
+         │  6. POST /messages                                   │
+         │     {"jsonrpc": "2.0",                               │
+         │      "method": "tools/list",                         │
+         ├──────────────────────────────────────────────────────>│
+         │      "id": 2}                                        │
+         │                                     Calls list_tools()│
+         │                                                       │
+         │  7. Response via SSE (JSON-RPC 2.0)                 │
+         │<══════════════════════════════════════════════════════┤
+         │     data: {"jsonrpc": "2.0",                         │
+         │           "result": {"tools": [...]}}                │
+         │                                                       │
+         │  8. POST /messages                                   │
+         │     {"jsonrpc": "2.0",                               │
+         │      "method": "tools/call",                         │
+         │      "params": {                                     │
+         │        "name": "get_fantasy_stats",                  │
+         ├──────────────────────────────────────────────────────>│
+         │        "arguments": {"player_name": "LeBron"}}}      │
+         │                                     Calls call_tool() │
+         │                                                       │
+         │  9. Response via SSE (JSON-RPC 2.0)                 │
+         │<══════════════════════════════════════════════════════┤
+         │     data: {"jsonrpc": "2.0",                         │
+         │           "result": {"player": "LeBron", ...}}       │
+         │                                                       │
+         │  Connection stays open for more requests...          │
+         │                                                       │
+         │  Client disconnects                                  │
+         ├──────────────────────────────────────────────────────>│
+         │                                     Cleanup session   │
+         │                                     abc-123           │
+         │                                                       │
+└─────────┘                                                └─────────┘
+
+
+Legend:
+  ───>  HTTP Request (POST/GET)
+  <───  HTTP Response
+  ═══>  SSE Event Stream (Server → Client)
+
+
+Key Points:
+━━━━━━━━━━━━
+1. SSE connection (/sse) stays open for entire session
+2. All client messages go to POST /messages
+3. All server responses come via SSE stream
+4. Everything uses JSON-RPC 2.0 format
+5. Session management with UUIDs
+6. CORS enabled for cross-origin requests
+
+
+Session Storage:
+━━━━━━━━━━━━━━━━
+sse_sessions = {
+    "abc-123": <SseServerTransport>,
+    "def-456": <SseServerTransport>,
+    ...
+}
+
+
+What Changed:
+━━━━━━━━━━━━━
+BEFORE: Custom events (connected, tools, ping) ❌
+AFTER:  JSON-RPC 2.0 protocol messages ✅
+
+BEFORE: No session management ❌
+AFTER:  UUID-based sessions ✅
+
+BEFORE: GET /messages (wrong!) ❌
+AFTER:  POST /messages (correct!) ✅
+
+BEFORE: No CORS ❌
+AFTER:  Full CORS support ✅
+

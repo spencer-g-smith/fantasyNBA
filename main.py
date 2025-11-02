@@ -6,13 +6,15 @@ via HTTP/SSE transport using FastAPI.
 """
 
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.middleware.cors import CORSMiddleware
 from sse_starlette.sse import EventSourceResponse
 from mcp.server import Server
 from mcp.types import Tool, TextContent
 from mcp.server.sse import SseServerTransport
 import json
 import asyncio
+import uuid
 from typing import Any, Dict
 import logging
 
@@ -27,8 +29,20 @@ app = FastAPI(
     version="1.0.0"
 )
 
+# Add CORS middleware for cross-origin requests
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 # Initialize MCP server
 mcp_server = Server("fantasy-nba-mcp")
+
+# Store active SSE sessions
+sse_sessions = {}
 
 
 # ============================================================================
@@ -214,102 +228,102 @@ async def health_check():
 @app.get("/sse")
 async def handle_sse(request: Request):
     """
-    SSE endpoint for MCP protocol communication.
+    SSE endpoint for MCP protocol.
     
-    This endpoint handles the Server-Sent Events transport for MCP.
-    Clients connect to this endpoint to interact with the MCP server.
-    
-    Returns text/event-stream with proper SSE formatting.
+    This endpoint handles the Server-Sent Events transport for MCP using
+    proper JSON-RPC 2.0 formatted messages that Claude expects.
     """
+    session_id = str(uuid.uuid4())
+    
     async def event_stream():
-        """Generate SSE events for MCP communication."""
-        logger.info("SSE connection established")
-        
         try:
-            # Send initial connection event
-            yield {
-                "event": "connected",
-                "data": json.dumps({
-                    "type": "connected",
-                    "server": "fantasy-nba-mcp",
-                    "version": "1.0.0",
-                    "timestamp": asyncio.get_event_loop().time()
-                })
-            }
+            # Create SSE transport
+            sse = SseServerTransport("/messages")
+            sse_sessions[session_id] = sse
             
-            # Send available tools
-            tools = await list_tools()
-            yield {
-                "event": "tools",
-                "data": json.dumps({
-                    "type": "tools",
-                    "tools": [
-                        {
-                            "name": tool.name,
-                            "description": tool.description
-                        } for tool in tools
-                    ]
-                })
-            }
+            logger.info(f"MCP session {session_id} starting")
             
-            # Keep connection alive with periodic pings
-            counter = 0
-            while True:
-                await asyncio.sleep(5)
-                counter += 1
-                yield {
-                    "event": "ping",
-                    "data": json.dumps({
-                        "type": "ping",
-                        "count": counter,
-                        "timestamp": asyncio.get_event_loop().time()
-                    })
-                }
+            # Initialize the transport
+            async with sse:
+                # Connect MCP server to the transport
+                init_options = mcp_server.create_initialization_options()
                 
-        except asyncio.CancelledError:
-            logger.info("SSE connection closed by client")
-            raise
-        except Exception as e:
-            logger.error(f"SSE stream error: {str(e)}")
-            yield {
-                "event": "error",
-                "data": json.dumps({
-                    "type": "error",
-                    "error": str(e)
-                })
-            }
-    
-    return EventSourceResponse(event_stream())
-
-
-@app.get("/messages")
-async def handle_messages():
-    """
-    Alternative endpoint for SSE messages.
-    Some MCP clients may use this endpoint.
-    """
-    async def event_stream():
-        """Generate SSE events."""
-        try:
-            async with SseServerTransport("/messages") as transport:
-                await mcp_server.connect(transport)
-                
-                # Keep connection alive
-                while True:
-                    await asyncio.sleep(1)
-                    yield {
-                        "event": "ping",
-                        "data": json.dumps({"type": "ping"})
-                    }
+                async with mcp_server.run(
+                    sse.read_stream,
+                    sse.write_stream,
+                    init_options
+                ):
+                    logger.info(f"MCP session {session_id} active")
                     
+                    # Keep connection alive until client disconnects
+                    # The transport handles sending proper MCP protocol messages
+                    try:
+                        while True:
+                            await asyncio.sleep(30)
+                    except asyncio.CancelledError:
+                        logger.info(f"Session {session_id} cancelled")
+                        
         except Exception as e:
-            logger.error(f"Messages stream error: {str(e)}")
-            yield {
-                "event": "error",
-                "data": json.dumps({"error": str(e)})
-            }
+            logger.error(f"SSE error in session {session_id}: {e}", exc_info=True)
+        finally:
+            sse_sessions.pop(session_id, None)
+            logger.info(f"Session {session_id} cleaned up")
     
-    return EventSourceResponse(event_stream())
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type"
+        }
+    )
+
+
+@app.post("/messages")
+async def handle_messages(request: Request):
+    """
+    Handle incoming MCP JSON-RPC 2.0 messages.
+    
+    This endpoint receives messages from the client and routes them to the
+    appropriate SSE session for processing.
+    """
+    try:
+        # Get the message from request body
+        body = await request.body()
+        message = json.loads(body)
+        
+        logger.info(f"Received message: {message}")
+        
+        # Route to the appropriate SSE session
+        # For now, send to the first active session
+        # In production, you might use headers or query params for session identification
+        if sse_sessions:
+            session = next(iter(sse_sessions.values()))
+            await session.handle_post_message(message)
+            return {"status": "ok"}
+        else:
+            logger.warning("No active SSE sessions to handle message")
+            return JSONResponse(
+                status_code=503,
+                content={"error": "No active sessions"}
+            )
+        
+    except json.JSONDecodeError as e:
+        logger.error(f"Invalid JSON in message: {e}")
+        return JSONResponse(
+            status_code=400,
+            content={"error": "Invalid JSON"}
+        )
+    except Exception as e:
+        logger.error(f"Message handling error: {e}", exc_info=True)
+        return JSONResponse(
+            status_code=500,
+            content={"error": str(e)}
+        )
 
 
 # ============================================================================

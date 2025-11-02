@@ -31,8 +31,8 @@ This MCP server exposes Fantasy NBA analysis tools through the Model Context Pro
 
 - **`GET /`** - API information and available tools
 - **`GET /health`** - Health check for monitoring
-- **`POST /sse`** - Main MCP SSE endpoint for client connections
-- **`GET /messages`** - Alternative SSE endpoint
+- **`GET /sse`** - Main MCP SSE endpoint for client connections (Server-Sent Events)
+- **`POST /messages`** - MCP message handler for incoming JSON-RPC 2.0 requests
 - **`GET /docs`** - Interactive API documentation (FastAPI automatic)
 
 ### Example Responses
@@ -126,16 +126,46 @@ curl http://localhost:8000/
 open http://localhost:8000/docs
 ```
 
+## MCP Protocol Flow
+
+This server implements the MCP protocol using **JSON-RPC 2.0** over **HTTP with SSE transport**.
+
+### Connection Flow
+
+1. **Client connects to `/sse` (GET)**
+   - Establishes SSE connection
+   - Server creates unique session ID
+   - Server initializes MCP transport
+   - Server sends MCP initialization messages via SSE
+
+2. **Client sends messages to `/messages` (POST)**
+   - Client sends JSON-RPC 2.0 formatted requests
+   - Server processes request and sends response via SSE
+   - All MCP methods follow JSON-RPC 2.0 spec
+
+3. **Protocol Messages**
+   ```
+   Client --GET--> /sse           (Establish SSE connection)
+   Server --SSE--> Client         (Send MCP initialization)
+   Client --POST-> /messages      (Request tools list)
+   Server --SSE--> Client         (Send tools via JSON-RPC)
+   Client --POST-> /messages      (Call tool)
+   Server --SSE--> Client         (Send tool result via JSON-RPC)
+   ```
+
 ## MCP Client Connection
 
-To connect an MCP client to this server:
+To connect an MCP client (like Claude Desktop) to this server:
 
 1. **Server URL**: `https://your-server.onrender.com/sse`
 2. **Protocol**: HTTP with SSE transport
-3. **Tools**: Call `tools/list` to get available tools
-4. **Execution**: Call `tools/call` with tool name and arguments
+3. **Message Format**: JSON-RPC 2.0
+4. **Tools**: Automatically discovered via MCP protocol
+5. **Execution**: Call tools via standard MCP methods
 
 ### Example MCP Tool Call
+
+The client sends this to `/messages` (POST):
 
 ```json
 {
@@ -150,6 +180,8 @@ To connect an MCP client to this server:
   "id": 1
 }
 ```
+
+The server responds via SSE with the result in JSON-RPC 2.0 format.
 
 ## Next Steps
 
@@ -246,13 +278,27 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> list[TextContent]:
 
 ### MCP client can't connect
 - Verify server is running: `curl https://your-server.onrender.com/health`
-- Check that SSE endpoint is accessible: `/sse` or `/messages`
-- Ensure CORS settings if connecting from browser
+- Check that SSE endpoint is accessible: `/sse` (GET) and `/messages` (POST)
+- Ensure CORS is enabled (already configured in `main.py`)
+- Check that client expects JSON-RPC 2.0 format
 
 ### Tools not working
 - Check server logs for errors
 - Verify tool input schema matches the call
 - Test tools via `/docs` interactive interface
+- Ensure messages are properly formatted as JSON-RPC 2.0
+
+### Recent Fix: JSON-RPC 2.0 Protocol
+
+**Problem**: Previous implementation sent custom SSE events instead of proper MCP protocol messages.
+
+**Solution**: Now uses `SseServerTransport` properly:
+- Connects MCP server via `mcp_server.run()`
+- Uses transport's `read_stream` and `write_stream`
+- Automatically handles JSON-RPC 2.0 formatting
+- Manages sessions with UUID tracking
+
+See `MCP_PROTOCOL_FIX.md` for detailed explanation of the fix.
 
 ## Resources
 
