@@ -211,50 +211,72 @@ async def health_check():
     }
 
 
-@app.post("/sse")
+@app.get("/sse")
 async def handle_sse(request: Request):
     """
     SSE endpoint for MCP protocol communication.
     
     This endpoint handles the Server-Sent Events transport for MCP.
     Clients connect to this endpoint to interact with the MCP server.
+    
+    Returns text/event-stream with proper SSE formatting.
     """
     async def event_stream():
         """Generate SSE events for MCP communication."""
+        logger.info("SSE connection established")
+        
         try:
-            # Read the request body
-            body = await request.body()
+            # Send initial connection event
+            yield {
+                "event": "connected",
+                "data": json.dumps({
+                    "type": "connected",
+                    "server": "fantasy-nba-mcp",
+                    "version": "1.0.0",
+                    "timestamp": asyncio.get_event_loop().time()
+                })
+            }
             
-            # Create SSE transport
-            async with SseServerTransport("/messages") as transport:
-                # Initialize server session
-                await mcp_server.connect(transport)
+            # Send available tools
+            tools = await list_tools()
+            yield {
+                "event": "tools",
+                "data": json.dumps({
+                    "type": "tools",
+                    "tools": [
+                        {
+                            "name": tool.name,
+                            "description": tool.description
+                        } for tool in tools
+                    ]
+                })
+            }
+            
+            # Keep connection alive with periodic pings
+            counter = 0
+            while True:
+                await asyncio.sleep(5)
+                counter += 1
+                yield {
+                    "event": "ping",
+                    "data": json.dumps({
+                        "type": "ping",
+                        "count": counter,
+                        "timestamp": asyncio.get_event_loop().time()
+                    })
+                }
                 
-                # Process incoming message
-                if body:
-                    message = json.loads(body)
-                    logger.info(f"Received message: {message}")
-                    
-                    # The transport will handle the response
-                    async for event in transport:
-                        yield {
-                            "event": "message",
-                            "data": json.dumps(event)
-                        }
-                
-                # Keep connection alive
-                while True:
-                    await asyncio.sleep(1)
-                    yield {
-                        "event": "ping",
-                        "data": json.dumps({"type": "ping"})
-                    }
-                    
+        except asyncio.CancelledError:
+            logger.info("SSE connection closed by client")
+            raise
         except Exception as e:
             logger.error(f"SSE stream error: {str(e)}")
             yield {
                 "event": "error",
-                "data": json.dumps({"error": str(e)})
+                "data": json.dumps({
+                    "type": "error",
+                    "error": str(e)
+                })
             }
     
     return EventSourceResponse(event_stream())
