@@ -103,5 +103,5 @@ if __name__ == "__main__":
     logger.info("MCP tools registered: get_fantasy_stats, compare_players")
     
     # Run the fastMCP server with HTTP transport
-    mcp.run(transport="http", host="0.0.0.0", port=port)
+    mcp.run(transport="sse", host="0.0.0.0", port=port)
 
