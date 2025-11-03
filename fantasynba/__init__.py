@@ -57,6 +57,14 @@ from .display import (
     display_matchup_results,
 )
 
+from .utils import (
+    initialize_league,
+    convert_stat_key,
+    fuzzy_find_player,
+    get_current_matchup_id,
+    fuzzy_find_team,
+)
+
 __version__ = "1.0.0"
 __all__ = [
     # Constants
@@ -92,5 +100,11 @@ __all__ = [
     "display_stat_rankings",
     "display_overall_rankings",
     "display_matchup_results",
+    # Utils
+    "initialize_league",
+    "convert_stat_key",
+    "fuzzy_find_player",
+    "get_current_matchup_id",
+    "fuzzy_find_team",
 ]
 
