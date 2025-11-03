@@ -15,7 +15,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Initialize fastMCP server
-mcp = FastMCP("fantasy-nba-mcp")
+mcp = FastMCP("fantasy-nba-mcp", host="0.0.0.0", port=8000)
 
 
 # ============================================================================
@@ -64,4 +64,3 @@ if __name__ == "__main__":
     
     # Run the fastMCP server with SSE transport
     mcp.run(transport="sse")
-
