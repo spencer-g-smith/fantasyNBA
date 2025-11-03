@@ -45,7 +45,7 @@ mcp = FastMCP("fantasy-nba-mcp", host="0.0.0.0", port=8000)
 
 @mcp.tool(
     name="get_player_stats",
-    description="Get comprehensive player statistics including raw per-game stats, z-scores (standard deviations above/below league average), injury status, and overall power score for any player. Use this to evaluate individual player performance, compare players, or assess trade values. Z-scores normalize different stat categories so you can see which stats a player excels at relative to the league. Power score is the sum of all z-scores - higher is better. Supports fuzzy name matching (e.g., 'lebron' finds 'LeBron James'). Available stat_key options: 'total' (season stats, default), 'last_30', 'last_15', 'last_7' (recent form), 'projected' (preseason projections).",
+    description="Get comprehensive player statistics including raw per-game stats, z-scores (standard deviations above/below league average), injury status, lineup slot, IR status (Injury Reserve), and overall power score for any player. Use this to evaluate individual player performance, compare players, or assess trade values. Z-scores normalize different stat categories so you can see which stats a player excels at relative to the league. Power score is the sum of all z-scores - higher is better. Supports fuzzy name matching (e.g., 'lebron' finds 'LeBron James'). Available stat_key options: 'total' (season stats, default), 'last_30', 'last_15', 'last_7' (recent form), 'projected' (preseason projections).",
     tags={"players", "stats", "zscores", "analytics"},
     meta={"version": "1.0", "category": "player-analysis"}
 )
@@ -120,19 +120,22 @@ async def get_player_stats(player_name: str, stat_key: str = "total") -> Dict[st
             "DD": player_zscore_data.get("DD", 0.0),
         }
         
+        lineup_slot = getattr(player, 'lineupSlot', 'Unknown')
+        
         return {
             "player_id": player.playerId,
             "player_name": player.name,
             "team": player.proTeam,
             "position": getattr(player, 'position', 'Unknown'),
-            "injury_status": getattr(player, 'injuryStatus', None),
-            "injured": getattr(player, 'injured', False),
+            "injury_status": getattr(player, 'injuryStatus', 'Unknown'),
+            "lineup_slot": lineup_slot,
+            "on_ir": lineup_slot == "IR",
             "stats": stats,
             "zscores": zscores,
             "per_game_power": player_zscore_data.get("per_game_power", 0.0),
             "stat_period": stat_key,
             "full_stat_key": converted_stat_key,
-            "note": "Z-scores show how many standard deviations above (positive) or below (negative) league average each stat is. A z-score of +2.0 means the player is in the top ~2% for that category, while -1.0 means below average. Power score is the sum of all z-scores - use it to compare overall player value. Higher power scores indicate more valuable fantasy players. Stats marked 'last_X' show recent form which can help identify hot/cold streaks. Injury_status shows player's current injury designation (e.g., 'OUT', 'QUESTIONABLE', 'DAY_TO_DAY', or None if healthy). Injured is a boolean flag indicating if the player is currently injured.",
+            "note": "Z-scores show how many standard deviations above (positive) or below (negative) league average each stat is. A z-score of +2.0 means the player is in the top ~2% for that category, while -1.0 means below average. Power score is the sum of all z-scores - use it to compare overall player value. Higher power scores indicate more valuable fantasy players. Stats marked 'last_X' show recent form which can help identify hot/cold streaks. Injury_status shows player's current injury designation (e.g., 'OUT', 'QUESTIONABLE', 'DAY_TO_DAY', or None if healthy). Lineup_slot indicates the player's current roster position. On_ir is a boolean flag indicating if the player is on IR (Injury Reserve) - players on IR do not count against your active roster limit but cannot accumulate stats until moved off IR.",
         }
         
     except ValueError as e:
@@ -144,7 +147,7 @@ async def get_player_stats(player_name: str, stat_key: str = "total") -> Dict[st
 
 @mcp.tool(
     name="get_top_free_agents",
-    description="Get the top 10 available free agents ranked by power score (sum of z-scores across all categories). Use this to identify the best waiver wire pickups based on overall value or recent performance. Each player includes their game schedule for the specified matchup period, which is crucial for streaming strategies. Players with more games in a matchup period provide more counting stats. Use 'last_7' or 'last_15' to find hot pickups, or 'total' for season-long value. Automatically defaults to current matchup period. Available stat_key options: 'total' (season average, default), 'last_30', 'last_15', 'last_7' (recent form), 'projected' (preseason projections).",
+    description="Get the top 10 available free agents ranked by power score (sum of z-scores across all categories). Use this to identify the best waiver wire pickups based on overall value or recent performance. Each player includes their game schedule for the specified matchup period and injury status, which is crucial for streaming strategies. Players with more games in a matchup period provide more counting stats. Use 'last_7' or 'last_15' to find hot pickups, or 'total' for season-long value. Automatically defaults to current matchup period. Available stat_key options: 'total' (season average, default), 'last_30', 'last_15', 'last_7' (recent form), 'projected' (preseason projections).",
     tags={"free-agents", "rankings"},
     meta={"version": "1.0", "category": "roster-management"}
 )
@@ -225,7 +228,6 @@ async def get_top_free_agents(stat_key: str = "total", matchup_id: Optional[int]
                 "team": player.proTeam,
                 "position": getattr(player, 'position', 'Unknown'),
                 "injury_status": getattr(player, 'injuryStatus', None),
-                "injured": getattr(player, 'injured', False),
                 "per_game_power": zscore_data.get("per_game_power", 0.0),
                 "zscores": zscores,
                 "game_dates": {matchup_id: game_dates},

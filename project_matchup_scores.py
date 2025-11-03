@@ -44,7 +44,7 @@ Examples:
     parser.add_argument(
         '--period',
         type=str,
-        default='projected',
+        default='last_30',
         choices=['total', 'last_30', 'last_15', 'last_7', 'projected'],
         help='Time period to use for per-game averages (default: projected)'
     )
