@@ -50,47 +50,6 @@ async def get_fantasy_stats(player_name: str) -> Dict[str, Any]:
     }
 
 
-@mcp.tool()
-async def compare_players(player1: str, player2: str) -> Dict[str, Any]:
-    """
-    Mock function that compares two players' fantasy stats.
-    
-    In production, this would use calculate_player_zscores and compare
-    real statistics.
-    """
-    stats1 = await get_fantasy_stats(player1)
-    stats2 = await get_fantasy_stats(player2)
-    
-    comparison = {
-        "player1": player1,
-        "player2": player2,
-        "comparison": {},
-        "winner": None
-    }
-    
-    # Compare each stat
-    for stat in ["points", "rebounds", "assists", "steals", "blocks"]:
-        val1 = stats1["stats"][stat]
-        val2 = stats2["stats"][stat]
-        comparison["comparison"][stat] = {
-            player1: val1,
-            player2: val2,
-            "difference": round(val1 - val2, 1),
-            "winner": player1 if val1 > val2 else player2 if val2 > val1 else "tie"
-        }
-    
-    # Overall winner based on per_game_power
-    if stats1["per_game_power"] > stats2["per_game_power"]:
-        comparison["winner"] = player1
-    elif stats2["per_game_power"] > stats1["per_game_power"]:
-        comparison["winner"] = player2
-    else:
-        comparison["winner"] = "tie"
-    
-    comparison["note"] = "This is mock data. Real implementation will use z-scores."
-    
-    return comparison
-
 
 # ============================================================================
 # APPLICATION STARTUP
@@ -104,5 +63,5 @@ if __name__ == "__main__":
     logger.info("MCP tools registered: get_fantasy_stats, compare_players")
     
     # Run the fastMCP server with SSE transport
-    mcp.run(transport="stdio")
+    mcp.run(transport="sse")
 
