@@ -452,7 +452,7 @@ async def get_team_projection(team_name: str, matchup_id: Optional[int] = None, 
 
 @mcp.tool(
     name="get_team_roster",
-    description="Get detailed roster breakdown for any fantasy team showing each player's power score, z-scores by category, and upcoming game schedule for a specific matchup period. Sorted by power score to quickly identify your best and worst performers. Use this to set optimal lineups, identify drop candidates, compare rosters across teams, or plan streaming strategies based on game schedules. The game schedule is critical - players with more games in a matchup provide more opportunities for counting stats. Z-scores by category help identify what each player contributes (e.g., specialists in BLK or 3PM). Supports fuzzy team name matching. Automatically defaults to current matchup period. Available stat_key options: 'total' (season average, default), 'last_30', 'last_15', 'last_7' (recent form), 'projected' (preseason).",
+    description="Get detailed roster breakdown for any fantasy team showing each player's power score, z-scores by category, lineup slot, IR status (Injury Reserve), and upcoming game schedule for a specific matchup period. Sorted by power score to quickly identify your best and worst performers. Use this to set optimal lineups, identify drop candidates, compare rosters across teams, or plan streaming strategies based on game schedules. The game schedule is critical - players with more games in a matchup provide more opportunities for counting stats. Z-scores by category help identify what each player contributes (e.g., specialists in BLK or 3PM). Supports fuzzy team name matching. Automatically defaults to current matchup period. Available stat_key options: 'total' (season average, default), 'last_30', 'last_15', 'last_7' (recent form), 'projected' (preseason).",
     tags={"teams", "roster", "stats", "schedule"},
     meta={"version": "1.0", "category": "team-analysis"}
 )
@@ -513,6 +513,8 @@ async def get_team_roster(team: str, stat_key: str = "total", matchup_id: Option
             schedule = get_player_schedule(player, matchup_id, league)
             game_dates = [game['date'].isoformat() for game in schedule]
             
+            lineup_slot = getattr(player, 'lineupSlot', 'Unknown')
+            
             # Get z-score data for this player
             zscore_data = player_zscores.get(player.name)
             if not zscore_data:
@@ -521,6 +523,8 @@ async def get_team_roster(team: str, stat_key: str = "total", matchup_id: Option
                     "player_name": player.name,
                     "team": player.proTeam,
                     "position": getattr(player, 'position', 'Unknown'),
+                    "lineup_slot": lineup_slot,
+                    "on_ir": lineup_slot == "IR",
                     "per_game_power": 0.0,
                     "zscores": {
                         "PTS": 0.0,
@@ -552,6 +556,8 @@ async def get_team_roster(team: str, stat_key: str = "total", matchup_id: Option
                 "player_name": player.name,
                 "team": player.proTeam,
                 "position": getattr(player, 'position', 'Unknown'),
+                "lineup_slot": lineup_slot,
+                "on_ir": lineup_slot == "IR",
                 "per_game_power": zscore_data.get("per_game_power", 0.0),
                 "zscores": zscores,
                 "game_dates": {matchup_id: game_dates},
@@ -567,7 +573,7 @@ async def get_team_roster(team: str, stat_key: str = "total", matchup_id: Option
             "matchup_id": matchup_id,
             "roster_count": len(roster),
             "roster": roster,
-            "note": "Roster is sorted by per_game_power (sum of z-scores) from highest to lowest - your most valuable players are at the top. Each player's z-scores show their relative strength in each category. Game_dates lists when each player has games during this matchup period - prioritize playing players with more games. Players with 0.0 power score have no stats for the selected period (injured, not playing, etc.). Use this to optimize your starting lineup by balancing power scores with game availability. Compare category z-scores across your roster to identify if you're over/under-invested in specific stats.",
+            "note": "Roster is sorted by per_game_power (sum of z-scores) from highest to lowest - your most valuable players are at the top. Each player's z-scores show their relative strength in each category. Game_dates lists when each player has games during this matchup period - prioritize playing players with more games. Players with 0.0 power score have no stats for the selected period (injured, not playing, etc.). Use this to optimize your starting lineup by balancing power scores with game availability. Compare category z-scores across your roster to identify if you're over/under-invested in specific stats. Lineup_slot indicates the player's current roster position. On_ir is a boolean flag indicating if the player is on IR (Injury Reserve) - players on IR do not count against your active roster limit but cannot accumulate stats until moved off IR.",
         }
         
     except ValueError as e:
