@@ -1,44 +1,17 @@
 """
 Utility functions for Fantasy NBA MCP Server.
 
-Includes helper functions for league initialization, fuzzy matching,
-and date-based calculations.
+Includes helper functions for fuzzy matching and date-based calculations.
 """
 
-import os
 import logging
 import difflib
 from typing import Any, List, Optional
 from datetime import datetime
 
-from espn_api.basketball import League
-
 from .constants import MATCHUP_SCHEDULE_2026, YEAR, LEAGUE_ID
 
 logger = logging.getLogger(__name__)
-
-
-def initialize_league():
-    """Initialize ESPN League with credentials from environment variables."""
-    swid = os.environ.get("SWID")
-    espn_s2 = os.environ.get("ESPN_S2")
-    
-    if not swid or not espn_s2:
-        logger.warning("SWID or ESPN_S2 environment variables not set. League functionality may be limited.")
-        # Try without auth for public leagues
-        try:
-            return League(league_id=LEAGUE_ID, year=YEAR)
-        except Exception as e:
-            logger.error(f"Failed to initialize league without auth: {e}")
-            return None
-    
-    try:
-        league = League(league_id=LEAGUE_ID, year=YEAR, espn_s2=espn_s2, swid=swid)
-        logger.info(f"Successfully initialized ESPN League {LEAGUE_ID} for year {YEAR}")
-        return league
-    except Exception as e:
-        logger.error(f"Failed to initialize ESPN League: {e}")
-        return None
 
 
 def convert_stat_key(short_key: str) -> str:

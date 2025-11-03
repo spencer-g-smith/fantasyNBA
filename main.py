@@ -9,6 +9,10 @@ from fastmcp import FastMCP
 from fastmcp.exceptions import ToolError
 from typing import Any, Dict, List, Optional
 import logging
+import os
+
+# Import ESPN League class
+from espn_api.basketball import League
 
 # Import fantasynba library functions
 from fantasynba import (
@@ -20,7 +24,7 @@ from fantasynba import (
     get_player_schedule,
     MATCHUP_SCHEDULE_2026,
     YEAR,
-    initialize_league,
+    LEAGUE_ID,
     convert_stat_key,
     fuzzy_find_player,
     get_current_matchup_id,
@@ -36,20 +40,12 @@ mcp = FastMCP("fantasy-nba-mcp", host="0.0.0.0", port=8000)
 
 
 # ============================================================================
-# ESPN LEAGUE INITIALIZATION
-# ============================================================================
-
-# Initialize league at module level
-league = initialize_league()
-
-
-# ============================================================================
 # MCP TOOLS - Real Fantasy NBA Functions
 # ============================================================================
 
 @mcp.tool(
     name="get_player_stats",
-    description="Get comprehensive player statistics including raw stats, z-scores, and power score with fuzzy name matching. Available stat_key options: 'total' (default), 'last_30', 'last_15', 'last_7', 'projected'.",
+    description="Get comprehensive player statistics including raw stats, z-scores, and power score with fuzzy name matching. Available stat_key options: 'total' (default), 'last_30', 'last_15', 'last_7', 'projected' (begining of year projection.).",
     tags={"players", "stats", "zscores", "analytics"},
     meta={"version": "1.0", "category": "player-analysis"}
 )
@@ -64,8 +60,17 @@ async def get_player_stats(player_name: str, stat_key: str = "total") -> Dict[st
     Returns:
         Dictionary with player ID, name, raw stats, z-scores, and power score
     """
-    if not league:
-        raise ToolError("ESPN League not initialized. Check SWID and ESPN_S2 environment variables.")
+    # Initialize league with auth credentials
+    swid = os.environ.get("SWID")
+    espn_s2 = os.environ.get("ESPN_S2")
+    
+    try:
+        if swid and espn_s2:
+            league = League(league_id=LEAGUE_ID, year=YEAR, espn_s2=espn_s2, swid=swid)
+        else:
+            league = League(league_id=LEAGUE_ID, year=YEAR)
+    except Exception as e:
+        raise ToolError(f"Failed to initialize ESPN League: {str(e)}")
     
     try:
         # Convert stat key to full format
@@ -151,8 +156,17 @@ async def get_top_free_agents(stat_key: str = "total", matchup_id: Optional[int]
     Returns:
         Dictionary with stat period info, matchup info, and list of top free agents with power scores, z-scores, and game dates
     """
-    if not league:
-        raise ToolError("ESPN League not initialized. Check SWID and ESPN_S2 environment variables.")
+    # Initialize league with auth credentials
+    swid = os.environ.get("SWID")
+    espn_s2 = os.environ.get("ESPN_S2")
+    
+    try:
+        if swid and espn_s2:
+            league = League(league_id=LEAGUE_ID, year=YEAR, espn_s2=espn_s2, swid=swid)
+        else:
+            league = League(league_id=LEAGUE_ID, year=YEAR)
+    except Exception as e:
+        raise ToolError(f"Failed to initialize ESPN League: {str(e)}")
     
     try:
         # Use current matchup if not specified
@@ -248,8 +262,17 @@ async def get_matchup_projections(matchup_id: Optional[int] = None, stat_key: st
     Returns:
         Dictionary with matchup projections and category winners
     """
-    if not league:
-        raise ToolError("ESPN League not initialized. Check SWID and ESPN_S2 environment variables.")
+    # Initialize league with auth credentials
+    swid = os.environ.get("SWID")
+    espn_s2 = os.environ.get("ESPN_S2")
+    
+    try:
+        if swid and espn_s2:
+            league = League(league_id=LEAGUE_ID, year=YEAR, espn_s2=espn_s2, swid=swid)
+        else:
+            league = League(league_id=LEAGUE_ID, year=YEAR)
+    except Exception as e:
+        raise ToolError(f"Failed to initialize ESPN League: {str(e)}")
     
     try:
         # Use current matchup if not specified
@@ -349,8 +372,17 @@ async def get_team_projection(team_name: str, matchup_id: Optional[int] = None, 
     Returns:
         Dictionary with team name, matchup ID, stat period, and projected stats for all categories
     """
-    if not league:
-        raise ToolError("ESPN League not initialized. Check SWID and ESPN_S2 environment variables.")
+    # Initialize league with auth credentials
+    swid = os.environ.get("SWID")
+    espn_s2 = os.environ.get("ESPN_S2")
+    
+    try:
+        if swid and espn_s2:
+            league = League(league_id=LEAGUE_ID, year=YEAR, espn_s2=espn_s2, swid=swid)
+        else:
+            league = League(league_id=LEAGUE_ID, year=YEAR)
+    except Exception as e:
+        raise ToolError(f"Failed to initialize ESPN League: {str(e)}")
     
     try:
         # Use current matchup if not specified
@@ -428,8 +460,17 @@ async def get_team_roster(team: str, stat_key: str = "total", matchup_id: Option
     Returns:
         Dictionary with team name, stat period, matchup ID, roster count, and list of players with powerscores and game dates
     """
-    if not league:
-        raise ToolError("ESPN League not initialized. Check SWID and ESPN_S2 environment variables.")
+    # Initialize league with auth credentials
+    swid = os.environ.get("SWID")
+    espn_s2 = os.environ.get("ESPN_S2")
+    
+    try:
+        if swid and espn_s2:
+            league = League(league_id=LEAGUE_ID, year=YEAR, espn_s2=espn_s2, swid=swid)
+        else:
+            league = League(league_id=LEAGUE_ID, year=YEAR)
+    except Exception as e:
+        raise ToolError(f"Failed to initialize ESPN League: {str(e)}")
     
     try:
         # Use current matchup if not specified

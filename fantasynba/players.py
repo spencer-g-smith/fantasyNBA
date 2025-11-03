@@ -35,7 +35,7 @@ def get_league_players(league, year):
             all_rostered_players.append(player)
     
     # Get top 30 free agents
-    top_free_agents = league.free_agents(size=30)
+    top_free_agents = league.free_agents(size=60)
     
     # Combine all players
     all_players = all_rostered_players + top_free_agents
