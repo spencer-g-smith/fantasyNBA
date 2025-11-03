@@ -536,4 +536,4 @@ if __name__ == "__main__":
     logger.info("MCP tools registered: get_player_stats, get_top_free_agents, get_matchup_projections, get_team_projection, get_team_roster")
     
     # Run the fastMCP server with SSE transport
-    mcp.run(transport="stdio")
+    mcp.run(transport="sse")
