@@ -36,15 +36,16 @@ async def get_fantasy_stats(player_name: str) -> Dict[str, Any]:
     return {
         "player": player_name,
         "stats": {
-            "points": round(15 + (hash_val % 20), 1),
-            "rebounds": round(5 + (hash_val % 10), 1),
-            "assists": round(3 + (hash_val % 8), 1),
-            "steals": round(0.5 + (hash_val % 3), 1),
-            "blocks": round(0.3 + (hash_val % 2), 1),
-            "three_pointers": round(1 + (hash_val % 4), 1),
-            "free_throw_pct": round(0.70 + (hash_val % 30) / 100, 3)
+            # Hard-coded sample stats for mock response
+            "points": 26.4,
+            "rebounds": 8.1,
+            "assists": 7.3,
+            "steals": 1.5,
+            "blocks": 0.8,
+            "three_pointers": 2.4,
+            "free_throw_pct": 0.812
         },
-        "per_game_power": round(10 + (hash_val % 30), 2),
+        "per_game_power": 27.8,
         "note": "This is mock data. Real implementation will use ESPN API."
     }
 
@@ -102,6 +103,6 @@ if __name__ == "__main__":
     logger.info("Starting Fantasy NBA MCP Server with fastMCP...")
     logger.info("MCP tools registered: get_fantasy_stats, compare_players")
     
-    # Run the fastMCP server with HTTP transport
-    mcp.run(transport="sse", host="0.0.0.0", port=port)
+    # Run the fastMCP server with SSE transport
+    mcp.run(transport="stdio")
 
