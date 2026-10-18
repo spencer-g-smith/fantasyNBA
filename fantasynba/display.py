@@ -9,6 +9,19 @@ import numpy as np
 
 from .constants import STAT_CATEGORIES
 from .matchups import compare_teams
+from .stats import SCORING_CATEGORIES, power_sort_key
+
+
+def fmt(value, digits=3):
+    return "N/A" if value is None else f"{value:.{digits}f}"
+
+
+def average_complete(values):
+    return float(np.mean(values)) if values and all(v is not None for v in values) else None
+
+
+def sortable(value):
+    return value is not None, value or 0
 
 
 # ============================================================================
@@ -39,15 +52,19 @@ def display_player_scores(team_player_zscores, league_teams):
         # Sort players by season_power (descending)
         sorted_players = sorted(
             team_player_zscores[team_name].items(),
-            key=lambda x: x[1]['season_power'],
+            key=lambda x: power_sort_key(x[1], 'season_power'),
             reverse=True
         )
         
-        print(f"{'Player':<30} {'GP':>6} {'Per-Game':>12} {'Season':>12}")
+        print(f"{'Player':<30} {'GP':>6} {'Per-Game':>12} {'Season':>12} {'FT%':>8} {'FTA/g':>8} {'FT impact z':>12} {'DD/g':>8} DD source")
         print("-" * 80)
         for player_name, stats in sorted_players:
-            print(f"{player_name:<30} {stats['games_played']:>6.0f} "
-                  f"{stats['per_game_power']:>12.2f} {stats['season_power']:>12.2f}")
+            print(f"{player_name:<30} {fmt(stats['games_played'], 0):>6} "
+                  f"{fmt(stats['per_game_power'], 2):>12} {fmt(stats['season_power'], 2):>12} "
+                  f"{fmt(stats['raw_stats']['FT%']):>8} {fmt(stats['raw_stats']['FTA']):>8} "
+                  f"{fmt(stats['FT impact']):>12} {fmt(stats['raw_stats']['DD']):>8} {stats['dd']['source']}")
+            if not stats['score_complete']:
+                print('  Incomplete score: ' + ', '.join(stats['missing_contributions']))
     
     # Display top free agents
     if "Free Agents" in team_player_zscores:
@@ -57,15 +74,19 @@ def display_player_scores(team_player_zscores, league_teams):
         # Sort free agents by season_power (descending)
         sorted_fa = sorted(
             team_player_zscores["Free Agents"].items(),
-            key=lambda x: x[1]['season_power'],
+            key=lambda x: power_sort_key(x[1], 'season_power'),
             reverse=True
         )
         
-        print(f"{'Player':<30} {'GP':>6} {'Per-Game':>12} {'Season':>12}")
+        print(f"{'Player':<30} {'GP':>6} {'Per-Game':>12} {'Season':>12} {'FT%':>8} {'FTA/g':>8} {'FT impact z':>12} {'DD/g':>8} DD source")
         print("-" * 80)
         for player_name, stats in sorted_fa:
-            print(f"{player_name:<30} {stats['games_played']:>6.0f} "
-                  f"{stats['per_game_power']:>12.2f} {stats['season_power']:>12.2f}")
+            print(f"{player_name:<30} {fmt(stats['games_played'], 0):>6} "
+                  f"{fmt(stats['per_game_power'], 2):>12} {fmt(stats['season_power'], 2):>12} "
+                  f"{fmt(stats['raw_stats']['FT%']):>8} {fmt(stats['raw_stats']['FTA']):>8} "
+                  f"{fmt(stats['FT impact']):>12} {fmt(stats['raw_stats']['DD']):>8} {stats['dd']['source']}")
+            if not stats['score_complete']:
+                print('  Incomplete score: ' + ', '.join(stats['missing_contributions']))
 
 
 def display_team_rankings(team_player_zscores):
@@ -89,25 +110,25 @@ def display_team_rankings(team_player_zscores):
         if roster_size == 0:
             continue
             
-        total_season_score = sum(player['season_power'] for player in players.values())
-        total_per_game_score = sum(player['per_game_power'] for player in players.values())
+        season_average = average_complete([player['season_power'] for player in players.values()])
+        per_game_average = average_complete([player['per_game_power'] for player in players.values()])
         
         team_scores[team_name] = {
-            'season_score': total_season_score / roster_size,
-            'per_game_score': total_per_game_score / roster_size,
+            'season_score': season_average,
+            'per_game_score': per_game_average,
             'roster_size': roster_size
         }
     
     # Sort teams by normalized season score (descending)
-    sorted_teams = sorted(team_scores.items(), key=lambda x: x[1]['season_score'], reverse=True)
+    sorted_teams = sorted(team_scores.items(), key=lambda x: sortable(x[1]['season_score']), reverse=True)
     
     # Print rankings
     print(f"\n{'Rank':<6} {'Team Name':<35} {'Avg Season':>15} {'Avg Per-Game':>15} {'Roster':>10}")
     print("-" * 90)
     
     for rank, (team_name, stats) in enumerate(sorted_teams, 1):
-        print(f"{rank:<6} {team_name:<35} {stats['season_score']:>15.2f} "
-              f"{stats['per_game_score']:>15.2f} {stats['roster_size']:>10}")
+        print(f"{rank:<6} {team_name:<35} {fmt(stats['season_score'], 2):>15} "
+              f"{fmt(stats['per_game_score'], 2):>15} {stats['roster_size']:>10}")
     
     print("\n" + "=" * 80)
 
@@ -125,14 +146,14 @@ def display_team_statistics(team_stats, sort_by='name'):
         sort_by: How to sort teams ('name' or a stat category)
     """
     print("\n" + "=" * 120)
-    print("TEAM STATISTICS - AVERAGE Z-SCORES BY CATEGORY")
+    print("TEAM STATISTICS - AVERAGE Z-SCORES BY CATEGORY (FT impact replaces FT%)")
     print("=" * 120)
     
     # Header
     header = f"{'Team Name':<30}"
-    for stat in STAT_CATEGORIES:
+    for stat in SCORING_CATEGORIES:
         header += f"{stat:>10}"
-    header += f"{'Roster':>10}"
+    header += f"{'Raw FT%':>10}{'FTA':>10}{'Roster':>10}"
     print(header)
     print("=" * 120)
     
@@ -143,24 +164,24 @@ def display_team_statistics(team_stats, sort_by='name'):
         # Sort by average across all stats
         sorted_teams = sorted(
             team_stats.items(),
-            key=lambda x: np.mean([x[1][stat] for stat in STAT_CATEGORIES]),
+            key=lambda x: sortable(average_complete([x[1][stat] for stat in SCORING_CATEGORIES])),
             reverse=True
         )
     else:
         # Sort by specific stat
         sorted_teams = sorted(
             team_stats.items(),
-            key=lambda x: x[1].get(sort_by, 0),
+            key=lambda x: sortable(x[1].get(sort_by)),
             reverse=True
         )
     
     # Display each team's stats
     for team_name, stats in sorted_teams:
         row = f"{team_name:<30}"
-        for stat in STAT_CATEGORIES:
+        for stat in SCORING_CATEGORIES:
             value = stats[stat]
-            row += f"{(value):>10.3f}"
-        row += f"{stats['roster_size']:>10}"
+            row += f"{fmt(value):>10}"
+        row += f"{fmt(stats['FT%']):>10}{fmt(stats['FTA']):>10}{stats['roster_size']:>10}"
         print(row)
     
     print("=" * 120)
@@ -183,14 +204,14 @@ def display_stat_rankings(team_stats):
     print("CATEGORY RANKINGS")
     print("=" * 80)
     
-    for stat in STAT_CATEGORIES:
+    for stat in SCORING_CATEGORIES:
         print(f"\n{stat} Rankings:")
         print("-" * 80)
         
         # Sort teams by this stat (descending)
         sorted_teams = sorted(
             team_stats.items(),
-            key=lambda x: x[1][stat],
+            key=lambda x: sortable(x[1][stat]),
             reverse=True
         )
         
@@ -198,7 +219,7 @@ def display_stat_rankings(team_stats):
         print("-" * 80)
         
         for rank, (team_name, stats) in enumerate(sorted_teams, 1):
-            print(f"{rank:<6} {team_name:<35} {stats[stat]:>15.3f}")
+            print(f"{rank:<6} {team_name:<35} {fmt(stats[stat]):>15}")
 
 
 def display_overall_rankings(team_stats):
@@ -215,13 +236,13 @@ def display_overall_rankings(team_stats):
     # Calculate overall average for each team
     team_overall = {}
     for team_name, stats in team_stats.items():
-        stat_values = [stats[stat] for stat in STAT_CATEGORIES]
-        team_overall[team_name] = np.mean(stat_values)
+        stat_values = [stats[stat] for stat in SCORING_CATEGORIES]
+        team_overall[team_name] = average_complete(stat_values)
     
     # Sort by overall average (descending)
     sorted_teams = sorted(
         team_overall.items(),
-        key=lambda x: x[1],
+        key=lambda x: sortable(x[1]),
         reverse=True
     )
     
@@ -230,7 +251,7 @@ def display_overall_rankings(team_stats):
     
     for rank, (team_name, avg_score) in enumerate(sorted_teams, 1):
         roster_size = team_stats[team_name]['roster_size']
-        print(f"{rank:<6} {team_name:<35} {avg_score:>15.3f} {roster_size:>10}")
+        print(f"{rank:<6} {team_name:<35} {fmt(avg_score):>15} {roster_size:>10}")
     
     print("\n" + "=" * 80)
 
@@ -282,11 +303,11 @@ def display_matchup_results(matchup_id, team_a, team_a_stats, team_b, team_b_sta
         
         # Format values based on stat type
         if stat == 'FT%':
-            a_str = f"{a_val:.3f}"
-            b_str = f"{b_val:.3f}"
+            a_str = fmt(a_val)
+            b_str = fmt(b_val)
         else:
-            a_str = f"{a_val:.1f}"
-            b_str = f"{b_val:.1f}"
+            a_str = fmt(a_val, 1)
+            b_str = fmt(b_val, 1)
         
         # Add checkmark for winner
         if winner == team_a.team_name:
@@ -294,11 +315,14 @@ def display_matchup_results(matchup_id, team_a, team_a_stats, team_b, team_b_sta
         elif winner == team_b.team_name:
             winner_str = f"{team_b_short} ✓"
         else:
-            winner_str = "TIE"
+            winner_str = winner
         
         print(f"{stat:<10} {a_str:>20} {b_str:>20} {winner_str:>20}")
     
     print("-" * 100)
+    print("DD sources: " + ", ".join(sorted({d['source'] for t in (team_a_stats, team_b_stats) for d in t.get('dd_sources', {}).values()})))
+    if not team_a_stats.get('score_complete') or not team_b_stats.get('score_complete'):
+        print("Incomplete projection: unavailable categories or provisional lineup scoring")
     print(f"{'FINAL':<10} {'':<20} {'':<20} {team_a_short} {team_a_wins}-{team_b_wins} {team_b_short:>20}")
     print("=" * 100)
     print()

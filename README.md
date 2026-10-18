@@ -44,7 +44,7 @@ README.md                  # This file
    Edit `fantasynba/constants.py` to set your ESPN league ID and year:
    ```python
    LEAGUE_ID = 682068465  # Your league ID
-   YEAR = 2026            # Season year
+   YEAR = 2027            # 2026–27 season (ESPN uses the ending year)
    ```
 
 ## Usage
@@ -140,7 +140,7 @@ league = League(league_id=LEAGUE_ID, year=YEAR)
 all_players, rostered, free_agents = get_league_players(league, YEAR)
 
 # Calculate z-scores
-player_zscores = calculate_player_zscores(all_players, '2026_projected')
+player_zscores = calculate_player_zscores(all_players, '2027_projected')
 
 # Use the results
 print(f"Top player: {max(player_zscores.items(), key=lambda x: x[1]['per_game_power'])}")
@@ -155,7 +155,7 @@ print(f"Top player: {max(player_zscores.items(), key=lambda x: x[1]['per_game_po
 - `is_player_injured(player)` - Check injury status
 
 **Statistical Calculations** (`fantasynba.stats`)
-- `calculate_expected_double_doubles(stats_dict)` - DD probability
+- `resolve_double_doubles(player, stats_key, peers)` in `fantasynba.scoring` - DD rate with source metadata
 - `calculate_player_zscores(players, stats_key)` - Calculate z-scores
 - `calculate_team_stats(team_player_zscores)` - Aggregate team stats
 - `build_team_dictionary(league, player_zscores, free_agents)` - Organize by team
@@ -175,7 +175,7 @@ print(f"Top player: {max(player_zscores.items(), key=lambda x: x[1]['per_game_po
 
 ### Z-Score Calculation
 
-The library calculates z-scores for each statistical category (PTS, BLK, STL, AST, REB, 3PM, FT%, DD) to normalize performance across different scales:
+The library calculates z-scores for each statistical category (PTS, BLK, STL, AST, REB, 3PM, FT impact, DD) to normalize performance across different scales:
 
 1. **Collect raw stats** for all players
 2. **Calculate mean and standard deviation** for each stat
@@ -183,13 +183,11 @@ The library calculates z-scores for each statistical category (PTS, BLK, STL, AS
 4. **Sum z-scores** to get per-game power score
 5. **Adjust for games played** to get season power score
 
-### Double-Double Calculation
+### FT impact and double-doubles
 
-Expected double-doubles are calculated using probability theory with normal distribution assumptions:
+FT scoring uses attempt-weighted **FT impact**: per-game FTM minus the fixed pool's combined FTM/FTA baseline × per-game FTA. Raw FT% and FTA/game remain separate. DD uses actual DD/GP for observed periods, a validated explicit projection when available, or source-labeled historical/production estimates. Missing contributions produce an incomplete overall score.
 
-- For each stat (PTS, REB, AST, STL, BLK), calculate P(≥10)
-- Combine probabilities to get P(at least 2 stats ≥10)
-- Standard deviations based on empirical variance ratios
+See [sources, formulas, assumptions and validation](docs/scoring.md).
 
 ### Lineup Optimization
 
@@ -207,9 +205,9 @@ Edit `fantasynba/constants.py` to customize:
 
 - **League settings**: `LEAGUE_ID`, `YEAR`
 - **Stat categories**: `STAT_CATEGORIES`
-- **Variance assumptions**: `STD_DEV_RATIOS`
+- **Frozen draft pool**: `data/comparison_pool_2027.json` (100 IDs)
 - **Lineup structure**: `LINEUP_SLOTS`
-- **Matchup schedule**: `MATCHUP_SCHEDULE_2026`
+- **Matchup schedule**: `get_matchup_schedule(league)` reads current ESPN daily scoring periods
 
 ## Requirements
 
@@ -220,10 +218,10 @@ Edit `fantasynba/constants.py` to customize:
 
 ## Notes
 
-- All calculations are performed in **real-time** - no cached data files
+- Calculations refresh ESPN inputs in real time; only the fixed comparison-pool membership is stored locally
 - Requires active ESPN Fantasy Basketball league access
 - API calls may take a few seconds depending on league size
-- Double-double calculations use probabilistic estimates
+- Double-double projections distinguish explicit sources, documented estimates, and missing values
 
 ## License
 
@@ -233,3 +231,9 @@ This project is for personal use in analyzing fantasy basketball leagues.
 
 Spencer Smith
 
+
+### 2026–27 season
+
+The active season is `YEAR = 2027`, using ESPN’s ending-year convention. Projection defaults use `2027_projected`. Matchup projections use ESPN’s daily scoring periods and report an unavailable schedule explicitly during preseason rather than reusing last season’s dates. The connected hosted MCP service needs these changes deployed before it returns the updated season; local changes do not update the hosted service.
+
+Draft preparation uses a fixed 100-player comparison pool (84 roster spots across six teams, plus 16 additional candidates). Membership is saved before drafting and includes drafted players when calculating baselines. All scoring paths use that same pool; availability only filters the displayed free agents. See the scoring documentation for the initial ESPN selection order.

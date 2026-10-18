@@ -5,9 +5,10 @@ Handles lineup position eligibility, daily lineup optimization,
 team matchup statistics calculation, and head-to-head comparisons.
 """
 
-from .constants import LINEUP_SLOTS, STAT_CATEGORIES, MATCHUP_SCHEDULE_2026
+from .constants import LINEUP_SLOTS, STAT_CATEGORIES, get_matchup_schedule, YEAR
 from .players import get_player_per_game_stats, get_players_playing_on_date
-from .stats import calculate_expected_double_doubles
+from .stats import power_sort_key
+from .scoring import ft_line
 
 
 # ============================================================================
@@ -48,7 +49,7 @@ def can_fill_position(player_position, slot_position):
 # LINEUP OPTIMIZATION
 # ============================================================================
 
-def optimize_lineup(available_players, player_zscores, stats_key='2026_projected'):
+def optimize_lineup(available_players, player_zscores, stats_key=f'{YEAR}_projected'):
     """
     Select the optimal 10-player lineup respecting position constraints.
     
@@ -64,7 +65,7 @@ def optimize_lineup(available_players, player_zscores, stats_key='2026_projected
     players_with_power = []
     for player in available_players:
         if player.name in player_zscores:
-            power = player_zscores[player.name]['per_game_power']
+            power = power_sort_key(player_zscores[player.name])
             players_with_power.append((player, power))
     
     players_with_power.sort(key=lambda x: x[1], reverse=True)
@@ -73,7 +74,8 @@ def optimize_lineup(available_players, player_zscores, stats_key='2026_projected
     lineup = {}
     used_players = set()
     
-    for slot in LINEUP_SLOTS:
+    for slot_index, slot in enumerate(LINEUP_SLOTS):
+        slot_key = slot if slot not in lineup else f'{slot}_{slot_index}'
         filled = False
         for player, power in players_with_power:
             if player.name in used_players:
@@ -86,19 +88,23 @@ def optimize_lineup(available_players, player_zscores, stats_key='2026_projected
                 if per_game_stats:
                     # Extract stats we need
                     stats = {}
-                    for stat in ['PTS', 'AST', 'BLK', 'REB', 'STL', 'FTM', 'FTA']:
+                    for stat in ['PTS', 'AST', 'BLK', 'REB', 'STL']:
                         stats[stat] = per_game_stats.get(stat, 0) or 0
                     
                     stats['3PM'] = per_game_stats.get('3PM', per_game_stats.get('3PTM', 0)) or 0
-                    stats['DD'] = calculate_expected_double_doubles(per_game_stats)
+                    stats['FTM'], stats['FTA'], _ = ft_line(per_game_stats)
+                    score = player_zscores[player.name]
+                    stats['DD'] = score['raw_stats']['DD']
+                    stats['dd'] = score['dd']
+                    stats['score_complete'] = score['score_complete']
                     
-                    lineup[slot] = (player, stats)
+                    lineup[slot_key] = (player, stats)
                     used_players.add(player.name)
                     filled = True
                     break
         
         if not filled:
-            lineup[slot] = None  # Empty slot
+            lineup[slot_key] = None  # Empty slot
     
     return lineup
 
@@ -107,7 +113,7 @@ def optimize_lineup(available_players, player_zscores, stats_key='2026_projected
 # MATCHUP CALCULATION
 # ============================================================================
 
-def calculate_team_matchup_stats(team, matchup_id, league, player_zscores, stats_key='2026_projected'):
+def calculate_team_matchup_stats(team, matchup_id, league, player_zscores, stats_key=f'{YEAR}_projected'):
     """
     Calculate projected stats for a team across all scoring periods in a matchup.
     
@@ -121,12 +127,13 @@ def calculate_team_matchup_stats(team, matchup_id, league, player_zscores, stats
     Returns:
         dict: Total stats for the team across the matchup
     """
-    scoring_periods = MATCHUP_SCHEDULE_2026.get(matchup_id, [])
+    scoring_periods = get_matchup_schedule(league).get(matchup_id, [])
     
     # Initialize totals
     totals = {
         'PTS': 0, 'AST': 0, 'BLK': 0, 'REB': 0, 'STL': 0,
-        '3PM': 0, 'FTM': 0, 'FTA': 0, 'DD': 0, 'games_played': 0
+        '3PM': 0, 'FTM': 0, 'FTA': 0, 'DD': 0, 'games_played': 0,
+        'missing_contributions': [], 'dd_sources': {}, 'lineup_score_complete': True
     }
     
     # Process each scoring period
@@ -145,14 +152,24 @@ def calculate_team_matchup_stats(team, matchup_id, league, player_zscores, stats
             if entry is not None:
                 player, stats = entry
                 for stat in ['PTS', 'AST', 'BLK', 'REB', 'STL', '3PM', 'FTM', 'FTA', 'DD']:
-                    totals[stat] += stats.get(stat, 0)
+                    value = stats.get(stat)
+                    if value is None:
+                        totals[stat] = None
+                        if stat not in totals['missing_contributions']:
+                            totals['missing_contributions'].append(stat)
+                    elif totals[stat] is not None:
+                        totals[stat] += value
                 totals['games_played'] += 1
+                totals['lineup_score_complete'] &= stats['score_complete']
+                totals['dd_sources'][player.name] = stats['dd']
     
     # Calculate FT%
-    if totals['FTA'] > 0:
+    if totals['FTA'] is not None and totals['FTM'] is not None and totals['FTA'] > 0:
         totals['FT%'] = totals['FTM'] / totals['FTA']
     else:
-        totals['FT%'] = 0.0
+        totals['FT%'] = None
+        totals['missing_contributions'].append('FT%')
+    totals['score_complete'] = not totals['missing_contributions'] and totals['lineup_score_complete']
     
     return totals
 
@@ -179,8 +196,11 @@ def compare_teams(team_a_name, team_a_stats, team_b_name, team_b_stats):
     team_b_wins = 0
     
     for stat in STAT_CATEGORIES:
-        a_val = team_a_stats.get(stat, 0)
-        b_val = team_b_stats.get(stat, 0)
+        a_val = team_a_stats.get(stat)
+        b_val = team_b_stats.get(stat)
+        if a_val is None or b_val is None:
+            category_results[stat] = 'Unavailable'
+            continue
         
         if a_val > b_val:
             category_results[stat] = team_a_name

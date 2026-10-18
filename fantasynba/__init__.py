@@ -8,9 +8,9 @@ Example usage:
     from fantasynba import get_league_players, calculate_player_zscores
     from espn_api.basketball import League
     
-    league = League(league_id=YOUR_LEAGUE_ID, year=2026)
-    players, rostered, free_agents = get_league_players(league, 2026)
-    zscores = calculate_player_zscores(players, '2026_projected')
+    league = League(league_id=YOUR_LEAGUE_ID, year=2027)
+    players, rostered, free_agents = get_league_players(league, 2027)
+    zscores = calculate_player_zscores(players, '2027_projected')
 """
 
 # Import key functions for easy access
@@ -20,7 +20,7 @@ from .constants import (
     STAT_CATEGORIES,
     STD_DEV_RATIOS,
     LINEUP_SLOTS,
-    MATCHUP_SCHEDULE_2026,
+    get_matchup_schedule,
 )
 
 from .players import (
@@ -72,7 +72,7 @@ __all__ = [
     "STAT_CATEGORIES",
     "STD_DEV_RATIOS",
     "LINEUP_SLOTS",
-    "MATCHUP_SCHEDULE_2026",
+    "get_matchup_schedule",
     # Players
     "get_league_players",
     "get_player_per_game_stats",

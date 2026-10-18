@@ -7,9 +7,8 @@ Includes helper functions for fuzzy matching and date-based calculations.
 import logging
 import difflib
 from typing import Any, List, Optional
-from datetime import datetime
 
-from .constants import MATCHUP_SCHEDULE_2026, YEAR, LEAGUE_ID
+from .constants import YEAR
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +21,7 @@ def convert_stat_key(short_key: str) -> str:
         short_key: Short format like "last_30", "last_15", "last_7", "total", "projected"
     
     Returns:
-        Full format like "2026_last_30", "2026_total", "2026_projected"
+        Full format like "2027_last_30", "2027_total", "2027_projected"
     """
     # Map common variations
     key_map = {
@@ -80,38 +79,9 @@ def fuzzy_find_player(player_name: str, all_players: List) -> Optional[Any]:
     return None
 
 
-def get_current_matchup_id() -> int:
-    """
-    Determine the current matchup ID based on today's date.
-    
-    Returns:
-        Current matchup ID (1-20)
-    """
-    today = datetime.now().date()
-    
-    # Season starts Oct 21, 2025 (scoring period 1)
-    season_start = datetime(2025, 10, 21).date()
-    
-    if today < season_start:
-        logger.info(f"Current date {today} is before season start. Defaulting to matchup 1")
-        return 1
-    
-    # Calculate days since season start
-    days_since_start = (today - season_start).days
-    
-    # Find which matchup we're in
-    for matchup_id, scoring_periods in sorted(MATCHUP_SCHEDULE_2026.items()):
-        min_period = min(scoring_periods)
-        max_period = max(scoring_periods)
-        
-        # Each scoring period is one day
-        if min_period <= days_since_start + 1 <= max_period:
-            logger.info(f"Current date {today} is in matchup {matchup_id}")
-            return matchup_id
-    
-    # If we're past all matchups, return the last one
-    logger.info(f"Current date {today} is past the season. Defaulting to matchup 20")
-    return 20
+def get_current_matchup_id(league) -> int:
+    """Use ESPN's current matchup period, defaulting to week 1 before opening day."""
+    return max(1, int(league.currentMatchupPeriod or 1))
 
 
 def fuzzy_find_team(team_name: str, teams: List) -> Optional[Any]:

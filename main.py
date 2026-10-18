@@ -5,6 +5,7 @@ A Model Context Protocol (MCP) server exposing Fantasy NBA analysis tools
 using fastMCP with standard MCP patterns.
 """
 
+from fantasynba.stats import SCORING_CATEGORIES, power_sort_key
 from fastmcp import FastMCP
 from fastmcp.exceptions import ToolError
 from typing import Any, Dict, List, Optional
@@ -22,7 +23,7 @@ from fantasynba import (
     calculate_team_matchup_stats,
     compare_teams,
     get_player_schedule,
-    MATCHUP_SCHEDULE_2026,
+    get_matchup_schedule,
     YEAR,
     LEAGUE_ID,
     convert_stat_key,
@@ -37,6 +38,12 @@ logger = logging.getLogger(__name__)
 
 # Initialize fastMCP server
 mcp = FastMCP("fantasy-nba-mcp", host="0.0.0.0", port=8000)
+
+
+def score_details(score):
+    return {key: score.get(key) for key in (
+        'raw_stats', 'dd', 'score_complete', 'missing_contributions',
+        'partial_power', 'ft_baseline', 'comparison_pool_size', 'dd_reference_count')}
 
 
 # ============================================================================
@@ -97,17 +104,6 @@ async def get_player_stats(player_name: str, stat_key: str = "total") -> Dict[st
         if not player_zscore_data:
             raise ToolError(f"No z-score data available for {player.name} with stat_key '{stat_key}'")
         
-        # Extract key raw stats
-        stats = {
-            "PTS": per_game_stats.get("PTS"),
-            "REB": per_game_stats.get("REB"),
-            "AST": per_game_stats.get("AST"),
-            "STL": per_game_stats.get("STL"),
-            "BLK": per_game_stats.get("BLK"),
-            "3PM": per_game_stats.get("3PM", per_game_stats.get("3PTM")),
-            "FT%": per_game_stats.get("FT%"),
-        }
-        
         # Extract z-scores for all categories
         zscores = {
             "PTS": player_zscore_data.get("PTS", 0.0),
@@ -116,8 +112,8 @@ async def get_player_stats(player_name: str, stat_key: str = "total") -> Dict[st
             "STL": player_zscore_data.get("STL", 0.0),
             "BLK": player_zscore_data.get("BLK", 0.0),
             "3PM": player_zscore_data.get("3PM", 0.0),
-            "FT%": player_zscore_data.get("FT%", 0.0),
-            "DD": player_zscore_data.get("DD", 0.0),
+            "FT impact": player_zscore_data.get("FT impact"),
+            "DD": player_zscore_data.get("DD"),
         }
         
         lineup_slot = getattr(player, 'lineupSlot', 'Unknown')
@@ -130,12 +126,13 @@ async def get_player_stats(player_name: str, stat_key: str = "total") -> Dict[st
             "injury_status": getattr(player, 'injuryStatus', 'Unknown'),
             "lineup_slot": lineup_slot,
             "on_ir": lineup_slot == "IR",
-            "stats": stats,
+            "stats": player_zscore_data["raw_stats"],
+            **score_details(player_zscore_data),
             "zscores": zscores,
-            "per_game_power": player_zscore_data.get("per_game_power", 0.0),
+            "per_game_power": player_zscore_data.get("per_game_power"),
             "stat_period": stat_key,
             "full_stat_key": converted_stat_key,
-            "note": "Z-scores show how many standard deviations above (positive) or below (negative) league average each stat is. A z-score of +2.0 means the player is in the top ~2% for that category, while -1.0 means below average. Power score is the sum of all z-scores - use it to compare overall player value. Higher power scores indicate more valuable fantasy players. Stats marked 'last_X' show recent form which can help identify hot/cold streaks. Injury_status shows player's current injury designation (e.g., 'OUT', 'QUESTIONABLE', 'DAY_TO_DAY', or None if healthy). Lineup_slot indicates the player's current roster position. On_ir is a boolean flag indicating if the player is on IR (Injury Reserve) - players on IR do not count against your active roster limit but cannot accumulate stats until moved off IR.",
+            "note": "Z-scores show how many standard deviations above (positive) or below (negative) league average each stat is. A z-score of +2.0 means the player is in the top ~2% for that category, while -1.0 means below average. Power score sums the six counting-stat z-scores, FT impact z-score, and DD z-score. Raw FT% and FTA/game remain in stats. DD sources distinguish observed values and estimates; missing contributions make power null. Higher power scores indicate more valuable fantasy players. Stats marked 'last_X' show recent form which can help identify hot/cold streaks. Injury_status shows player's current injury designation (e.g., 'OUT', 'QUESTIONABLE', 'DAY_TO_DAY', or None if healthy). Lineup_slot indicates the player's current roster position. On_ir is a boolean flag indicating if the player is on IR (Injury Reserve) - players on IR do not count against your active roster limit but cannot accumulate stats until moved off IR.",
         }
         
     except ValueError as e:
@@ -177,17 +174,17 @@ async def get_top_free_agents(stat_key: str = "total", matchup_id: Optional[int]
     try:
         # Use current matchup if not specified
         if matchup_id is None:
-            matchup_id = get_current_matchup_id()
+            matchup_id = get_current_matchup_id(league)
         
         # Validate matchup ID
-        if matchup_id not in MATCHUP_SCHEDULE_2026:
+        if matchup_id not in get_matchup_schedule(league):
             raise ValueError(f"Invalid matchup_id {matchup_id}. Must be between 1 and 20.")
         
         # Convert stat key to full format
         converted_stat_key = convert_stat_key(stat_key)
         
         # Fetch free agents
-        _, _, top_free_agents = get_league_players(league, YEAR)
+        all_players, _, top_free_agents = get_league_players(league, YEAR)
         
         if not top_free_agents:
             return {
@@ -199,7 +196,7 @@ async def get_top_free_agents(stat_key: str = "total", matchup_id: Optional[int]
             }
         
         # Calculate z-scores for free agents
-        player_zscores = calculate_player_zscores(top_free_agents, converted_stat_key)
+        player_zscores = calculate_player_zscores(all_players, converted_stat_key)
         
         # Create list of free agents with their power scores
         free_agent_list = []
@@ -215,8 +212,8 @@ async def get_top_free_agents(stat_key: str = "total", matchup_id: Optional[int]
                 "STL": zscore_data.get("STL", 0.0),
                 "BLK": zscore_data.get("BLK", 0.0),
                 "3PM": zscore_data.get("3PM", 0.0),
-                "FT%": zscore_data.get("FT%", 0.0),
-                "DD": zscore_data.get("DD", 0.0),
+                "FT impact": zscore_data.get("FT impact"),
+                "DD": zscore_data.get("DD"),
             }
             
             # Get player's game schedule for the matchup
@@ -228,13 +225,14 @@ async def get_top_free_agents(stat_key: str = "total", matchup_id: Optional[int]
                 "team": player.proTeam,
                 "position": getattr(player, 'position', 'Unknown'),
                 "injury_status": getattr(player, 'injuryStatus', None),
-                "per_game_power": zscore_data.get("per_game_power", 0.0),
+                "per_game_power": zscore_data.get("per_game_power"),
+                **score_details(zscore_data),
                 "zscores": zscores,
                 "game_dates": {matchup_id: game_dates},
             })
         
         # Sort by power score (descending) and take top 10
-        free_agent_list.sort(key=lambda x: x["per_game_power"], reverse=True)
+        free_agent_list.sort(key=power_sort_key, reverse=True)
         top_10 = free_agent_list[:10]
         
         return {
@@ -285,10 +283,10 @@ async def get_matchup_projections(matchup_id: Optional[int] = None, stat_key: st
     try:
         # Use current matchup if not specified
         if matchup_id is None:
-            matchup_id = get_current_matchup_id()
+            matchup_id = get_current_matchup_id(league)
         
         # Validate matchup ID
-        if matchup_id not in MATCHUP_SCHEDULE_2026:
+        if matchup_id not in get_matchup_schedule(league):
             raise ValueError(f"Invalid matchup_id {matchup_id}. Must be between 1 and 20.")
         
         # Convert stat key to full format
@@ -345,6 +343,9 @@ async def get_matchup_projections(matchup_id: Optional[int] = None, stat_key: st
                 "team_a_wins": team_a_wins,
                 "team_b_wins": team_b_wins,
                 "projected_result": f"{team_a_wins}-{team_b_wins}",
+                "score_complete": team_a_stats['score_complete'] and team_b_stats['score_complete'],
+                "team_a_stats": team_a_stats,
+                "team_b_stats": team_b_stats,
                 "category_winners": category_results,
             })
         
@@ -353,7 +354,7 @@ async def get_matchup_projections(matchup_id: Optional[int] = None, stat_key: st
             "stat_period": stat_key,
             "full_stat_key": converted_stat_key,
             "matchups": matchups,
-            "note": "Each matchup shows a projected_result (e.g., '6-2') indicating how many of the 8 categories each team is expected to win. Category_winners shows which team wins each specific stat (PTS, REB, AST, STL, BLK, 3PM, FT%, DD). Projections are based on each team's total z-scores in that category across all active players for that matchup period. Close matchups (e.g., '5-3' or '4-4') are good opportunities for streaming players or making strategic lineup changes to flip categories. The stat_key affects projections - recent periods weight current performance while 'total' uses full season averages.",
+            "note": "Each matchup shows a projected_result (e.g., '6-2') indicating how many of the 8 categories each team is expected to win. Category_winners shows which team wins each specific stat (PTS, REB, AST, STL, BLK, 3PM, FT%, DD). Projections use raw totals across active lineups, FT% from combined makes/attempts, and source-labeled DD rates. Unavailable categories receive no winner; score_complete flags provisional results. Close matchups (e.g., '5-3' or '4-4') are good opportunities for streaming players or making strategic lineup changes to flip categories. The stat_key affects projections - recent periods weight current performance while 'total' uses full season averages.",
         }
         
     except ValueError as e:
@@ -365,7 +366,7 @@ async def get_matchup_projections(matchup_id: Optional[int] = None, stat_key: st
 
 @mcp.tool(
     name="get_team_projection",
-    description="Get projected cumulative statistics for a specific fantasy team across all 8 categories for a matchup period. Shows the total z-scores (not raw counting stats) your team is expected to accumulate in each category based on your roster and their game schedules. Use this to analyze your team's strengths and weaknesses, identify which categories you're competitive in, or plan which stats to target via trades/pickups. Z-scores are additive - they represent how many standard deviations above/below average your entire team performs in each category. Higher z-scores mean stronger performance. Supports fuzzy team name matching. Automatically defaults to current matchup period. Available stat_key options: 'projected' (default), 'total', 'last_30', 'last_15', 'last_7'.",
+    description="Get projected cumulative statistics for a specific fantasy team across all 8 categories for a matchup period. Shows raw counting-stat totals and combined-makes/attempts FT% based on the optimized lineup and game schedules; DD sources identify estimates. Use this to analyze your team's strengths and weaknesses, identify which categories you're competitive in, or plan which stats to target via trades/pickups. Higher projected category totals mean stronger production; FT% is a fraction. Supports fuzzy team name matching. Automatically defaults to current matchup period. Available stat_key options: 'projected' (default), 'total', 'last_30', 'last_15', 'last_7'.",
     tags={"teams", "projections"},
     meta={"version": "1.0", "category": "matchup-analysis"}
 )
@@ -396,10 +397,10 @@ async def get_team_projection(team_name: str, matchup_id: Optional[int] = None, 
     try:
         # Use current matchup if not specified
         if matchup_id is None:
-            matchup_id = get_current_matchup_id()
+            matchup_id = get_current_matchup_id(league)
         
         # Validate matchup ID
-        if matchup_id not in MATCHUP_SCHEDULE_2026:
+        if matchup_id not in get_matchup_schedule(league):
             raise ValueError(f"Invalid matchup_id {matchup_id}. Must be between 1 and 20.")
         
         # Convert stat key to full format
@@ -436,11 +437,16 @@ async def get_team_projection(team_name: str, matchup_id: Optional[int] = None, 
                 "REB": team_stats.get("REB", 0),
                 "STL": team_stats.get("STL", 0),
                 "3PM": team_stats.get("3PM", 0),
-                "FT%": team_stats.get("FT%", 0),
-                "DD": team_stats.get("DD", 0),
+                "FT%": team_stats.get("FT%"),
+                "DD": team_stats.get("DD"),
             },
             "games_played": team_stats.get("games_played", 0),
-            "note": "Projected_stats show cumulative z-scores for your team in each category (sum of all rostered players' z-scores multiplied by games played in the matchup). These are NOT raw counting stats - they're normalized scores that allow fair comparison across categories. Positive values indicate above-average team performance in that category; negative values indicate below-average. Compare your team's projections against your opponent's to see which categories you're likely to win. Games_played shows total team games in this matchup period, considering the optimized 10 player lineup. Categories with higher absolute z-scores are your team's strengths or weaknesses.",
+            "score_complete": team_stats['score_complete'],
+            "missing_contributions": team_stats['missing_contributions'],
+            "dd_sources": team_stats['dd_sources'],
+            "FTM": team_stats['FTM'],
+            "FTA": team_stats['FTA'],
+            "note": "Projected_stats are raw matchup totals; FT% = combined FTM / combined FTA. DD may include historical-production estimates; inspect dd_sources. None means unavailable, and score_complete flags missing category inputs or provisional lineup selection.",
         }
         
     except ValueError as e:
@@ -483,10 +489,10 @@ async def get_team_roster(team: str, stat_key: str = "total", matchup_id: Option
     try:
         # Use current matchup if not specified
         if matchup_id is None:
-            matchup_id = get_current_matchup_id()
+            matchup_id = get_current_matchup_id(league)
         
         # Validate matchup ID
-        if matchup_id not in MATCHUP_SCHEDULE_2026:
+        if matchup_id not in get_matchup_schedule(league):
             raise ValueError(f"Invalid matchup_id {matchup_id}. Must be between 1 and 20.")
         
         # Find the team using fuzzy matching
@@ -497,7 +503,7 @@ async def get_team_roster(team: str, stat_key: str = "total", matchup_id: Option
                 f"Team '{team}' not found. Available teams: {', '.join(available_teams)}"
             )
         
-        # Convert stat key if needed (e.g., "total" -> "total_2026")
+        # Convert stat key if needed (e.g., "total" -> "2027_total")
         converted_stat_key = convert_stat_key(stat_key)
         
         # Fetch all players to calculate z-scores
@@ -518,24 +524,17 @@ async def get_team_roster(team: str, stat_key: str = "total", matchup_id: Option
             # Get z-score data for this player
             zscore_data = player_zscores.get(player.name)
             if not zscore_data:
-                # Player has no stats for this period, include with 0 powerscore
+                # Preserve unavailable data as an incomplete score
                 roster.append({
                     "player_name": player.name,
                     "team": player.proTeam,
                     "position": getattr(player, 'position', 'Unknown'),
                     "lineup_slot": lineup_slot,
                     "on_ir": lineup_slot == "IR",
-                    "per_game_power": 0.0,
-                    "zscores": {
-                        "PTS": 0.0,
-                        "REB": 0.0,
-                        "AST": 0.0,
-                        "STL": 0.0,
-                        "BLK": 0.0,
-                        "3PM": 0.0,
-                        "FT%": 0.0,
-                        "DD": 0.0,
-                    },
+                    "per_game_power": None,
+                    "score_complete": False,
+                    "missing_contributions": list(SCORING_CATEGORIES),
+                    "zscores": {stat: None for stat in SCORING_CATEGORIES},
                     "game_dates": {matchup_id: game_dates},
                 })
                 continue
@@ -548,8 +547,8 @@ async def get_team_roster(team: str, stat_key: str = "total", matchup_id: Option
                 "STL": zscore_data.get("STL", 0.0),
                 "BLK": zscore_data.get("BLK", 0.0),
                 "3PM": zscore_data.get("3PM", 0.0),
-                "FT%": zscore_data.get("FT%", 0.0),
-                "DD": zscore_data.get("DD", 0.0),
+                "FT impact": zscore_data.get("FT impact"),
+                "DD": zscore_data.get("DD"),
             }
             
             roster.append({
@@ -558,13 +557,14 @@ async def get_team_roster(team: str, stat_key: str = "total", matchup_id: Option
                 "position": getattr(player, 'position', 'Unknown'),
                 "lineup_slot": lineup_slot,
                 "on_ir": lineup_slot == "IR",
-                "per_game_power": zscore_data.get("per_game_power", 0.0),
+                "per_game_power": zscore_data.get("per_game_power"),
+                **score_details(zscore_data),
                 "zscores": zscores,
                 "game_dates": {matchup_id: game_dates},
             })
         
         # Sort by powerscore (descending)
-        roster.sort(key=lambda x: x["per_game_power"], reverse=True)
+        roster.sort(key=power_sort_key, reverse=True)
         
         return {
             "team_name": fantasy_team.team_name,
@@ -573,7 +573,7 @@ async def get_team_roster(team: str, stat_key: str = "total", matchup_id: Option
             "matchup_id": matchup_id,
             "roster_count": len(roster),
             "roster": roster,
-            "note": "Roster is sorted by per_game_power (sum of z-scores) from highest to lowest - your most valuable players are at the top. Each player's z-scores show their relative strength in each category. Game_dates lists when each player has games during this matchup period - prioritize playing players with more games. Players with 0.0 power score have no stats for the selected period (injured, not playing, etc.). Use this to optimize your starting lineup by balancing power scores with game availability. Compare category z-scores across your roster to identify if you're over/under-invested in specific stats. Lineup_slot indicates the player's current roster position. On_ir is a boolean flag indicating if the player is on IR (Injury Reserve) - players on IR do not count against your active roster limit but cannot accumulate stats until moved off IR.",
+            "note": "Roster is sorted by per_game_power (sum of z-scores) from highest to lowest - your most valuable players are at the top. Each player's z-scores show their relative strength in each category. Game_dates lists when each player has games during this matchup period - prioritize playing players with more games. Missing contributions produce null power and score_complete=false. FT impact is attempt-weighted; raw_stats retains FT%, FTA/game and DD/game with dd source metadata. Use this to optimize your starting lineup by balancing power scores with game availability. Compare category z-scores across your roster to identify if you're over/under-invested in specific stats. Lineup_slot indicates the player's current roster position. On_ir is a boolean flag indicating if the player is on IR (Injury Reserve) - players on IR do not count against your active roster limit but cannot accumulate stats until moved off IR.",
         }
         
     except ValueError as e:

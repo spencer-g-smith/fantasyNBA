@@ -5,51 +5,95 @@ Handles player roster retrieval, schedule lookups, injury status checks,
 and filtering players by availability.
 """
 
+import json
+from pathlib import Path
 from datetime import datetime
 from typing import List, Dict, Optional
 from espn_api.basketball import League
-from espn_api.basketball.constant import PRO_TEAM_MAP
+from espn_api.basketball.constant import PRO_TEAM_MAP, STATS_MAP
+from espn_api.basketball.player import Player
 
-from .constants import MATCHUP_SCHEDULE_2026
+from .constants import get_matchup_schedule, YEAR
 
 
 # ============================================================================
 # PLAYER DATA FETCHING
 # ============================================================================
 
+def comparison_pool_ids(year=YEAR):
+    """Versioned membership, independent of current availability or ownership."""
+    path = Path(__file__).resolve().parent.parent / 'data' / f'comparison_pool_{year}.json'
+    data = json.loads(path.read_text())
+    ids = [row['id'] for row in data['players']]
+    if len(ids) != 100 or len(set(ids)) != 100 or data['year'] != year:
+        raise ValueError('Comparison pool must contain exactly 100 unique player IDs')
+    return ids
+
+
+def get_comparison_players(players, year=YEAR):
+    ids = comparison_pool_ids(year)
+    lookup = {p.playerId: p for p in players}
+    missing = set(ids) - lookup.keys()
+    if missing:
+        raise ValueError(f'Missing {len(missing)} fixed comparison-pool players; fetch get_league_players first')
+    return [lookup[player_id] for player_id in ids]
+
+
+def attach_espn_records(player, entry):
+    """Keep observed historical splits discarded by espn-api 0.45.1.
+
+    Source 0 = observed; source 1 = projection; split 0 = full season.
+    averageStats is already per game, except GP which is a season game count.
+    """
+    for split in entry['player'].get('stats', []):
+        source = split.get('statSourceId')
+        if source not in (0, 1) or split.get('statSplitTypeId') != 0:
+            continue
+        season = split['seasonId']
+        key = f"{season}_{'total' if source == 0 else 'projected'}"
+        total = {STATS_MAP.get(k, k): v for k, v in split.get('stats', {}).items()}
+        avg = {STATS_MAP.get(k, k): v for k, v in split.get('averageStats', {}).items()}
+        if not avg and total.get('GP', 0) > 0:
+            # Only derive explicitly known counts, never divide ratios or GP.
+            avg = {k: total[k] / total['GP'] for k in ('PTS', 'REB', 'AST', 'STL', 'BLK', '3PM', '3PTM', 'FTM', 'FTA', 'DD') if k in total}
+            avg['GP'] = total['GP']
+            if 'FTM' in total and total.get('FTA', 0) > 0:
+                avg['FT%'] = total['FTM'] / total['FTA']
+        player.stats[key] = {'avg': avg, 'total': total, 'source_id': source,
+                             'season_id': season, 'split_type_id': 0}
+    return player
+
+
 def get_league_players(league, year):
-    """
-    Fetch all rostered players and top 30 free agents from the league.
-    
-    Args:
-        league: ESPN League object
-        year: Season year
-    
-    Returns:
-        tuple: (all_players, all_rostered_players, top_free_agents)
-    """
-    # Collect all rostered players
-    all_rostered_players = []
-    for team in league.teams:
-        for player in team.roster:
-            all_rostered_players.append(player)
-    
-    # Get top 30 free agents
-    top_free_agents = league.free_agents(size=60)
-    
-    # Combine all players
-    all_players = all_rostered_players + top_free_agents
-    
-    return all_players, all_rostered_players, top_free_agents
+    """Fetch roster/availability plus every frozen pool member and raw history."""
+    rostered = [p for team in league.teams for p in team.roster]
+    free_agents = league.free_agents(size=100)
+    players = {p.playerId: p for p in rostered + free_agents}
+    ids = list(dict.fromkeys(comparison_pool_ids(year) + list(players)))
+    # ESPN rejects combining filterIds and limit on this view.
+    filters = {'players': {'filterIds': {'value': ids}}}
+    data = league.espn_request.league_get(
+        params={'view': 'kona_player_info'},
+        headers={'x-fantasy-filter': json.dumps(filters)})
+    for entry in data.get('players', []):
+        player_id = entry['player']['id']
+        player = players.get(player_id)
+        if player is None:
+            player = Player(entry, year)
+            players[player_id] = player
+        attach_espn_records(player, entry)
+    # Fail visibly if ESPN drops a reference player, rather than shrinking pool.
+    get_comparison_players(list(players.values()), year)
+    return list(players.values()), rostered, free_agents
 
 
-def get_player_per_game_stats(player, stats_key='2026_projected'):
+def get_player_per_game_stats(player, stats_key=f'{YEAR}_projected'):
     """
     Get per-game average statistics for a player.
     
     Args:
         player: ESPN Player object
-        stats_key: Stats key (e.g., '2026_projected', '2026_last_30')
+        stats_key: Stats key (e.g., '2027_projected', '2027_last_30')
     
     Returns:
         dict: Per-game statistics or None if not available
@@ -120,7 +164,7 @@ def get_player_schedule(player: object, matchup_id: int, league: League) -> List
         ]
     
     Example:
-        >>> league = League(league_id=123456, year=2026)
+        >>> league = League(league_id=123456, year=2027)
         >>> player = league.teams[0].roster[0]
         >>> schedule = get_player_schedule(player, matchup_id=5, league=league)
         >>> for game in schedule:
@@ -147,7 +191,7 @@ def _get_pro_team_id_by_name(team_name: str) -> Optional[int]:
 
 def _get_scoring_periods_for_matchup(matchup_id: int, league: League) -> List[int]:
     """Get the list of scoring periods for a matchup ID."""
-    return MATCHUP_SCHEDULE_2026.get(matchup_id, [])
+    return get_matchup_schedule(league).get(matchup_id, [])
 
 
 def _build_schedule(pro_team_id: int, scoring_periods: List[int], league: League) -> List[Dict]:

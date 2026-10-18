@@ -1,0 +1,407 @@
+{
+  "league_id": 682068465,
+  "year": 2027,
+  "selection": "100 players returned by ESPN sortPercOwned descending, then STANDARD draft rank; frozen before drafting on 2026-10-16",
+  "players": [
+    {
+      "id": 5104157,
+      "name": "Victor Wembanyama"
+    },
+    {
+      "id": 4278073,
+      "name": "Shai Gilgeous-Alexander"
+    },
+    {
+      "id": 3112335,
+      "name": "Nikola Jokic"
+    },
+    {
+      "id": 3945274,
+      "name": "Luka Doncic"
+    },
+    {
+      "id": 4594268,
+      "name": "Anthony Edwards"
+    },
+    {
+      "id": 3908809,
+      "name": "Donovan Mitchell"
+    },
+    {
+      "id": 3032977,
+      "name": "Giannis Antetokounmpo"
+    },
+    {
+      "id": 4432166,
+      "name": "Cade Cunningham"
+    },
+    {
+      "id": 4431678,
+      "name": "Tyrese Maxey"
+    },
+    {
+      "id": 3136195,
+      "name": "Karl-Anthony Towns"
+    },
+    {
+      "id": 4065648,
+      "name": "Jayson Tatum"
+    },
+    {
+      "id": 5041939,
+      "name": "Cooper Flagg"
+    },
+    {
+      "id": 3934672,
+      "name": "Jalen Brunson"
+    },
+    {
+      "id": 3202,
+      "name": "Kevin Durant"
+    },
+    {
+      "id": 3136193,
+      "name": "Devin Booker"
+    },
+    {
+      "id": 4433134,
+      "name": "Scottie Barnes"
+    },
+    {
+      "id": 4684740,
+      "name": "Amen Thompson"
+    },
+    {
+      "id": 4432816,
+      "name": "LaMelo Ball"
+    },
+    {
+      "id": 3975,
+      "name": "Stephen Curry"
+    },
+    {
+      "id": 3917376,
+      "name": "Jaylen Brown"
+    },
+    {
+      "id": 3992,
+      "name": "James Harden"
+    },
+    {
+      "id": 4066261,
+      "name": "Bam Adebayo"
+    },
+    {
+      "id": 1966,
+      "name": "LeBron James"
+    },
+    {
+      "id": 4701230,
+      "name": "Jalen Johnson"
+    },
+    {
+      "id": 3149673,
+      "name": "Pascal Siakam"
+    },
+    {
+      "id": 3936299,
+      "name": "Jamal Murray"
+    },
+    {
+      "id": 4871144,
+      "name": "Alperen Sengun"
+    },
+    {
+      "id": 4432158,
+      "name": "Evan Mobley"
+    },
+    {
+      "id": 6583,
+      "name": "Anthony Davis"
+    },
+    {
+      "id": 4593803,
+      "name": "Jalen Williams"
+    },
+    {
+      "id": 3155942,
+      "name": "Domantas Sabonis"
+    },
+    {
+      "id": 4277905,
+      "name": "Trae Young"
+    },
+    {
+      "id": 6450,
+      "name": "Kawhi Leonard"
+    },
+    {
+      "id": 4432573,
+      "name": "Paolo Banchero"
+    },
+    {
+      "id": 4871145,
+      "name": "Josh Giddey"
+    },
+    {
+      "id": 4066457,
+      "name": "Austin Reaves"
+    },
+    {
+      "id": 4396993,
+      "name": "Tyrese Haliburton"
+    },
+    {
+      "id": 3078576,
+      "name": "Derrick White"
+    },
+    {
+      "id": 4683021,
+      "name": "Deni Avdija"
+    },
+    {
+      "id": 4433621,
+      "name": "Jalen Duren"
+    },
+    {
+      "id": 4066320,
+      "name": "Desmond Bane"
+    },
+    {
+      "id": 4066259,
+      "name": "De'Aaron Fox"
+    },
+    {
+      "id": 5061575,
+      "name": "Kon Knueppel"
+    },
+    {
+      "id": 4845367,
+      "name": "Stephon Castle"
+    },
+    {
+      "id": 4278104,
+      "name": "Michael Porter Jr."
+    },
+    {
+      "id": 3147657,
+      "name": "Mikal Bridges"
+    },
+    {
+      "id": 3059318,
+      "name": "Joel Embiid"
+    },
+    {
+      "id": 4433255,
+      "name": "Chet Holmgren"
+    },
+    {
+      "id": 4395628,
+      "name": "Zion Williamson"
+    },
+    {
+      "id": 4396907,
+      "name": "Darius Garland"
+    },
+    {
+      "id": 4869342,
+      "name": "Dyson Daniels"
+    },
+    {
+      "id": 6442,
+      "name": "Kyrie Irving"
+    },
+    {
+      "id": 4066336,
+      "name": "Lauri Markkanen"
+    },
+    {
+      "id": 3064514,
+      "name": "Julius Randle"
+    },
+    {
+      "id": 4279888,
+      "name": "Ja Morant"
+    },
+    {
+      "id": 4566434,
+      "name": "Franz Wagner"
+    },
+    {
+      "id": 4066328,
+      "name": "Jarrett Allen"
+    },
+    {
+      "id": 4396971,
+      "name": "Naz Reid"
+    },
+    {
+      "id": 6606,
+      "name": "Damian Lillard"
+    },
+    {
+      "id": 4278039,
+      "name": "Nickeil Alexander-Walker"
+    },
+    {
+      "id": 4395725,
+      "name": "Tyler Herro"
+    },
+    {
+      "id": 5142718,
+      "name": "AJ Dybantsa"
+    },
+    {
+      "id": 4397688,
+      "name": "Trey Murphy III"
+    },
+    {
+      "id": 3934719,
+      "name": "OG Anunoby"
+    },
+    {
+      "id": 5037871,
+      "name": "Dylan Harper"
+    },
+    {
+      "id": 4433287,
+      "name": "Brandon Miller"
+    },
+    {
+      "id": 3032976,
+      "name": "Rudy Gobert"
+    },
+    {
+      "id": 5124612,
+      "name": "VJ Edgecombe"
+    },
+    {
+      "id": 4433136,
+      "name": "Walker Kessler"
+    },
+    {
+      "id": 4433627,
+      "name": "Keyonte George"
+    },
+    {
+      "id": 4017837,
+      "name": "Ivica Zubac"
+    },
+    {
+      "id": 4277961,
+      "name": "Jaren Jackson Jr."
+    },
+    {
+      "id": 4431680,
+      "name": "Onyeka Okongwu"
+    },
+    {
+      "id": 5041935,
+      "name": "Cameron Boozer"
+    },
+    {
+      "id": 2595516,
+      "name": "Norman Powell"
+    },
+    {
+      "id": 3062679,
+      "name": "Josh Hart"
+    },
+    {
+      "id": 5095151,
+      "name": "Caleb Wilson"
+    },
+    {
+      "id": 3978,
+      "name": "DeMar DeRozan"
+    },
+    {
+      "id": 5105565,
+      "name": "Donovan Clingan"
+    },
+    {
+      "id": 4066383,
+      "name": "Miles Bridges"
+    },
+    {
+      "id": 5160992,
+      "name": "Alex Sarr"
+    },
+    {
+      "id": 3907497,
+      "name": "Dejounte Murray"
+    },
+    {
+      "id": 4431671,
+      "name": "Jaden McDaniels"
+    },
+    {
+      "id": 4395651,
+      "name": "Coby White"
+    },
+    {
+      "id": 4437244,
+      "name": "Jalen Green"
+    },
+    {
+      "id": 4251,
+      "name": "Paul George"
+    },
+    {
+      "id": 4066354,
+      "name": "Payton Pritchard"
+    },
+    {
+      "id": 2490149,
+      "name": "CJ McCollum"
+    },
+    {
+      "id": 3913176,
+      "name": "Brandon Ingram"
+    },
+    {
+      "id": 4684742,
+      "name": "Ausar Thompson"
+    },
+    {
+      "id": 4711294,
+      "name": "Matas Buzelis"
+    },
+    {
+      "id": 4065733,
+      "name": "Ty Jerome"
+    },
+    {
+      "id": 4395724,
+      "name": "Immanuel Quickley"
+    },
+    {
+      "id": 4711272,
+      "name": "Reed Sheppard"
+    },
+    {
+      "id": 4395625,
+      "name": "RJ Barrett"
+    },
+    {
+      "id": 6478,
+      "name": "Nikola Vucevic"
+    },
+    {
+      "id": 3059319,
+      "name": "Andrew Wiggins"
+    },
+    {
+      "id": 5041955,
+      "name": "Darryn Peterson"
+    },
+    {
+      "id": 5105623,
+      "name": "Kel'el Ware"
+    },
+    {
+      "id": 4591725,
+      "name": "Ryan Rollins"
+    }
+  ]
+}

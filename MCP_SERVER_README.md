@@ -170,7 +170,7 @@ async def get_real_player_stats(player_name: str) -> dict:
     """Get real player statistics from ESPN Fantasy Basketball."""
     league = League(league_id=LEAGUE_ID, year=YEAR)
     all_players, _, _ = get_league_players(league, YEAR)
-    player_zscores = calculate_player_zscores(all_players, '2026_projected')
+    player_zscores = calculate_player_zscores(all_players, '2027_projected')
     
     if player_name in player_zscores:
         return player_zscores[player_name]
